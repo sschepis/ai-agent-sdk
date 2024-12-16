@@ -1,0 +1,35 @@
+{
+    "name": "@covalenthq/ai-agent-sdk",
+    "version": "0.1.0",
+    "description": "Covalent Agent SDK. Build cool AI agents for the blockchain",
+    "main": "dist",
+    "types": "dist",
+    "scripts": {
+        "test": "echo \"Error: no test specified\" && exit 1",
+        "build": "tsc",
+        "clean": "rm -rf dist",
+        "prepublishOnly": "npm run clean && npm run build",
+        "lint": "eslint .",
+        "pretty": "prettier . --write"
+    },
+    "author": {
+        "name": "covalenthq",
+        "url": "https://covalenthq.com"
+    },
+    "license": "MIT",
+    "dependencies": {
+        "@covalenthq/client-sdk": "^2.2.1",
+        "zod": "^3.23.8"
+    },
+    "devDependencies": {
+        "@trivago/prettier-plugin-sort-imports": "^5.2.0",
+        "@types/node": "^22.10.1",
+        "@typescript-eslint/eslint-plugin": "^8.18.0",
+        "@typescript-eslint/parser": "^8.18.0",
+        "eslint": "^9.16.0",
+        "eslint-config-prettier": "^9.1.0",
+        "eslint-plugin-prettier": "^5.2.1",
+        "prettier-plugin-tailwindcss": "^0.6.9",
+        "typescript": "^5.7.2"
+    }
+}
