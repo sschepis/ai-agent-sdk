@@ -1,7 +1,7 @@
 import { FlatCompat } from "@eslint/eslintrc";
 import js from "@eslint/js";
-import prettier from "eslint-config-prettier";
-import prettierPlugin from "eslint-plugin-prettier";
+// import prettier from "eslint-config-prettier";
+// import prettierPlugin from "eslint-plugin-prettier";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -21,17 +21,17 @@ export default [
         "eslint:recommended",
         "plugin:@typescript-eslint/recommended",
     ),
-    prettier, // Add the prettier config directly
+    // prettier, // Add the prettier config directly
     {
-        plugins: {
-            prettier: prettierPlugin,
-        },
+        // plugins: {
+        //     prettier: prettierPlugin,
+        // },
         rules: {
             semi: "error",
             "no-multiple-empty-lines": "error",
             indent: "off",
             "no-unsafe-optional-chaining": "warn",
-            "prettier/prettier": "error",
+            // "prettier/prettier": "error",
             "@typescript-eslint/no-var-requires": "off",
             "@typescript-eslint/no-unused-vars": "warn",
             "@typescript-eslint/no-inferrable-types": "off",
