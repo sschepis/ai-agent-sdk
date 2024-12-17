@@ -1,11 +1,9 @@
 import { OnchainService } from "./services/OnchainService";
 import type { OnchainProvider } from "./services/OnchainService";
 
-export type {
-    ChainName,
-    Currency,
-    OnchainProvider,
-} from "./services/OnchainService";
+export { OnchainProvider } from "./services/OnchainService";
+
+export type { ChainName, Currency } from "./services/OnchainService";
 
 /**
  * A powerful interface for retrieving blockchain data, designed specifically
