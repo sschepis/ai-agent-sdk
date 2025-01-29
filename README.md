@@ -27,7 +27,7 @@
 
 ### 1. Start with a template
 
-> npx create-zee-agents
+> npx create-zee-app
 
 This will create a new project with a basic setup.
 

@@ -1,10 +1,10 @@
 {
-    "name": "@covalenthq/create-zee-agents",
+    "name": "@covalenthq/create-zee-app",
     "version": "0.2.1",
     "description": "Create a new ZEE agents application to build your own autonomous agents.",
     "type": "module",
     "bin": {
-        "create-zee-agents": "bin/create-zee-agents"
+        "create-zee-app": "bin/create-zee-app"
     },
     "files": [
         "dist",

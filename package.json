@@ -3,7 +3,7 @@
     "description": "Monorepo for AI Agent SDK",
     "workspaces": [
         "packages/ai-agent-sdk",
-        "packages/create-zee-agents",
+        "packages/create-zee-app",
         "docs/"
     ],
     "scripts": {
