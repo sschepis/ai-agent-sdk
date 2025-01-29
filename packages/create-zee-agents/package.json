@@ -4,7 +4,7 @@
     "description": "Create a new Zee agents application with one command",
     "type": "module",
     "bin": {
-        "create-zee-agents": "bin/index"
+        "create-zee-agents": "bin/create-zee-agents"
     },
     "files": [
         "dist",
