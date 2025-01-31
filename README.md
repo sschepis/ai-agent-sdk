@@ -3,7 +3,7 @@
 # AI Agent SDK for TypeScript
 
 [📖 Documentation](https://cxt.build/) | 
-[📖 ZEE Use-cases](https://cxt.build/docs/use-cases/overview)
+[✍🏻 ZEE Use-cases](https://cxt.build/docs/use-cases/overview)
 
 <br />
 
