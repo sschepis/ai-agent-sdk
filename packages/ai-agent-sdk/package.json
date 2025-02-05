@@ -36,6 +36,7 @@
     },
     "scripts": {
         "test": "vitest",
+        "test:zee": "vitest src/core/zee/zee.test.ts",
         "build": "tsc",
         "clean": "rm -rf dist",
         "prepublishOnly": "cp ../../README.md . && npm run clean && npm run build",
