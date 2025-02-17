@@ -1,166 +1,93 @@
 import { Base } from "../base";
-import type { Tool } from "../tools/base";
-import type { FunctionToolCall, LLMResponse, ModelConfig } from "./llm.types";
-import OpenAI from "openai";
-import { zodResponseFormat } from "openai/helpers/zod";
 import type {
-    ChatCompletionCreateParamsNonStreaming,
-    ChatCompletionMessageParam,
-    ChatCompletionTool,
-} from "openai/resources/chat/completions";
-import type { AnyZodObject } from "zod";
-import { z } from "zod";
-import { zodToJsonSchema } from "zod-to-json-schema";
-
-const entryToObject = ([key, value]: [string, AnyZodObject]) => {
-    return z.object({ type: z.literal(key), value });
-};
-
-const responseAsStructuredOutput = (schema: Record<string, AnyZodObject>) => {
-    const [first, ...rest] = Object.entries(schema);
-    if (!first) {
-        throw new Error("No schema provided");
-    }
-
-    return zodResponseFormat(
-        z.object({
-            response: z.discriminatedUnion("type", [
-                entryToObject(first),
-                ...rest.map(entryToObject),
-            ]),
-        }),
-        "task_result"
-    );
-};
-
-const formatOpenAITools = (
-    tools: Record<string, Tool>
-): Array<ChatCompletionTool> => {
-    return Object.entries(tools).map(([name, tool]) => ({
-        type: "function",
-        function: {
-            name,
-            parameters: zodToJsonSchema(tool.schema),
-            description: tool.description,
-            strict: true,
-        },
-    }));
-};
+    GenerateObjectParams,
+    GenerateTextParams,
+    LLMParameters,
+    LLMResponse,
+    LLMStructuredResponse,
+    LLMTextResponse,
+    ModelProvider,
+} from "./llm.types";
+import { anthropic } from "@ai-sdk/anthropic";
+import { google } from "@ai-sdk/google";
+import { openai } from "@ai-sdk/openai";
+import { generateObject, generateText, type LanguageModel } from "ai";
+import type { AnyZodObject, z } from "zod";
 
 export class LLM extends Base {
-    private model: ModelConfig;
+    private model: LanguageModel;
 
-    constructor(model: ModelConfig) {
+    constructor({ provider, id }: ModelProvider) {
         super("llm");
-        this.model = model;
+        switch (provider) {
+            case "openai":
+                this.model = openai(id);
+                break;
+            case "anthropic":
+                this.model = anthropic(id);
+                break;
+            case "google":
+                this.model = google(id);
+                break;
+        }
     }
 
-    public async generate<T extends Record<string, AnyZodObject>>(
-        messages: ChatCompletionMessageParam[],
-        response_schema: T,
-        tools: Record<string, Tool>
-    ): Promise<FunctionToolCall | LLMResponse<T>> {
-        const config: ConstructorParameters<typeof OpenAI>[0] = {
-            apiKey: this.model.apiKey,
-        };
-        const provider = this.model.provider;
-        switch (provider) {
-            case "OPEN_AI":
-                break;
-            case "DEEPSEEK":
-                config.baseURL = "https://api.deepseek.com/v1";
-                config.apiKey =
-                    process.env["DEEPSEEK_API_KEY"] || this.model.apiKey;
-                break;
-            case "GROK":
-                config.baseURL = "https://api.groq.com/openai/v1";
-                config.apiKey =
-                    process.env["GROK_API_KEY"] || this.model.apiKey;
-                break;
-            case "GEMINI":
-                config.baseURL =
-                    "https://generativelanguage.googleapis.com/v1beta/openai";
-                config.apiKey =
-                    process.env["GEMINI_API_KEY"] || this.model.apiKey;
-                break;
-            default:
-                var _exhaustiveCheck: never = provider;
-                throw new Error(
-                    `Unhandled model provider: ${_exhaustiveCheck}`
-                );
-        }
-        const client = new OpenAI(config);
+    public async generate<ZOD_OBJECT extends AnyZodObject>(
+        args: LLMParameters,
+        viaAgent: boolean = false
+    ): Promise<LLMResponse<ZOD_OBJECT>> {
+        try {
+            const hasTools =
+                "tools" in args && Object.keys(args.tools ?? {}).length > 0;
 
-        const mappedTools = tools ? formatOpenAITools(tools) : [];
+            const isTextResponse = viaAgent || hasTools;
 
-        const mappedTemperature =
-            this.model.temperature &&
-            this.model.temperature > 0 &&
-            this.model.temperature <= 2
-                ? this.model.temperature
-                : undefined;
-        const requestConfig: ChatCompletionCreateParamsNonStreaming = {
-            model: this.model.name,
-            messages,
-            tools: mappedTools.length > 0 ? mappedTools : undefined,
-            temperature: mappedTemperature,
-        };
+            if (isTextResponse) {
+                const { tools, ...textArgs } = args as GenerateTextParams;
+                const response = await generateText({
+                    model: this.model,
+                    toolChoice: "auto",
+                    maxSteps: 3,
+                    maxRetries: 5,
+                    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                    // @ts-expect-error
+                    tools,
+                    ...textArgs,
+                });
 
-        switch (provider) {
-            case "GEMINI": {
-                const [schemaKey, schemaValue] =
-                    Object.entries(response_schema)[0] || [];
-                if (!schemaKey || !schemaValue) {
-                    throw new Error("Invalid response schema");
+                if (!response.text) {
+                    throw new Error(
+                        "No response text generated by the model. Consider increasing `maxSteps` and/or `maxRetries`"
+                    );
                 }
-                requestConfig.response_format = zodResponseFormat(
-                    schemaValue,
-                    schemaKey
-                );
-                break;
+
+                return {
+                    type: "assistant",
+                    value: response.text,
+                } as LLMTextResponse;
+            } else {
+                const objectArgs = args as GenerateObjectParams;
+                const response = await generateObject<z.infer<ZOD_OBJECT>>({
+                    model: this.model,
+                    mode: "json",
+                    maxRetries: 5,
+                    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                    // @ts-expect-error
+                    output: "object",
+                    ...objectArgs,
+                });
+
+                if (!response.object) {
+                    throw new Error("No response object");
+                }
+
+                return {
+                    type: "assistant",
+                    value: response.object,
+                } as LLMStructuredResponse<ZOD_OBJECT>;
             }
-            default: {
-                requestConfig.response_format =
-                    responseAsStructuredOutput(response_schema);
-                break;
-            }
+        } catch (error) {
+            throw new Error(`Failed to parse response: ${error}`);
         }
-
-        const response =
-            await client.beta.chat.completions.parse(requestConfig);
-
-        if (response?.choices[0]?.message?.tool_calls?.length) {
-            return {
-                type: "tool_call",
-                value: response.choices[0].message.tool_calls,
-            } satisfies FunctionToolCall;
-        }
-
-        if (!response?.choices[0]?.message?.parsed) {
-            throw new Error(JSON.stringify(response));
-        }
-
-        const parsed = response.choices[0]?.message?.parsed as {
-            response: {
-                type: keyof T;
-                value: unknown;
-            };
-        };
-        if (provider === "GEMINI") {
-            if (!parsed) {
-                throw new Error("No parsed response from Gemini");
-            }
-
-            return {
-                type: Object.keys(response_schema)[0] as keyof T,
-                value: parsed,
-            } as LLMResponse<T>;
-        }
-
-        if (parsed?.response) {
-            return parsed.response as LLMResponse<T>;
-        }
-
-        throw new Error("No response in message");
     }
 }

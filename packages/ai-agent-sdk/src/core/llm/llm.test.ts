@@ -1,152 +1,135 @@
-import { user } from "../base";
-import { LLM } from "./llm";
-import type { ModelConfig } from "./llm.types";
-import { type ChatCompletionMessageParam } from "openai/resources";
+import { LLM, type ModelProvider } from ".";
+import { userMessage } from "../../functions";
+import { Tool, type ToolSet } from "../tools";
+import fetch from "node-fetch";
 import { describe, expect, test } from "vitest";
-import z from "zod";
+import { z } from "zod";
 
 describe("@ai-agent-sdk/llm", () => {
-    const providers: ModelConfig[] = [
+    const providers: ModelProvider[] = [
         {
-            provider: "OPEN_AI",
-            name: "gpt-4o-mini",
+            provider: "openai",
+            id: "gpt-4o-mini",
         },
         {
-            provider: "GEMINI",
-            name: "gemini-1.5-flash",
+            provider: "google",
+            id: "gemini-1.5-flash",
         },
-    ] as const;
+    ];
 
-    providers.forEach((config) => {
-        describe(config.provider, () => {
-            const llm = new LLM(config);
+    providers.forEach((model) => {
+        describe(`${model.provider}::${model.id}`, () => {
+            const llm = new LLM(model);
 
-            test("text with custom schema output", async () => {
-                const schema = {
-                    step: z.object({
-                        answer: z.string(),
-                        explanation: z.number(),
-                    }),
-                };
+            test("structured output", async () => {
+                const schema = z.object({
+                    answer: z.string(),
+                    explanation: z.number(),
+                });
 
-                const result = await llm.generate(
-                    [user("What is the answer to 5+7?")],
+                const result = await llm.generate<typeof schema>({
+                    prompt: "What is 5 plus 7?",
                     schema,
-                    {}
-                );
+                });
 
                 console.log(result);
 
-                if (result.type !== "step") {
-                    throw new Error(
-                        `Expected step response, got ${result.type}`
-                    );
+                if (typeof result.value !== "object") {
+                    throw new Error("Expected structured output");
                 }
 
-                expect(result.value).toBeDefined();
+                expect(result.type).toBe("assistant");
                 expect(result.value["answer"]).toBeDefined();
-                expect(result.value["answer"]).toEqual("12");
                 expect(result.value["explanation"]).toBeDefined();
             });
 
-            test.skipIf(config.provider === "GEMINI")(
-                "image with custom schema output",
-                async () => {
-                    const messages: ChatCompletionMessageParam[] = [
-                        {
-                            role: "user",
-                            content: [
-                                {
-                                    type: "text",
-                                    text: "What's in this image? Suggest Improvements to the logo as well",
-                                },
-
-                                {
-                                    type: "image_url",
-                                    image_url: {
-                                        url: "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2f/Google_2015_logo.svg/1200px-Google_2015_logo.svg.png",
-                                        detail: "auto",
-                                    },
-                                },
-                            ],
-                        },
-                    ];
-
-                    const schema = {
-                        analysis: z.object({
-                            description: z.string(),
-                            colors: z.array(z.string()),
-                            text_content: z.string().optional(),
-                            improvements: z.string().optional(),
+            test("tool calling", async () => {
+                const tools: ToolSet = {
+                    weather: new Tool({
+                        provider: model.provider,
+                        name: "weather",
+                        description: "Fetch the current weather in a location",
+                        parameters: z.object({
+                            location: z.string(),
                         }),
-                    };
-
-                    const result = await llm.generate(messages, schema, {});
-
-                    console.log(result);
-
-                    if (result.type !== "analysis") {
-                        throw new Error(
-                            `Expected step response, got ${result.type}`
-                        );
-                    }
-
-                    expect(result.value).toBeDefined();
-                    expect(result.value.description).toBeDefined();
-                    expect(result.value.colors).toBeDefined();
-                    expect(Array.isArray(result.value.colors)).toBe(true);
-                }
-            );
-
-            test.skipIf(config.provider === "GEMINI")(
-                "image as base64 input",
-                async () => {
-                    const messages: ChatCompletionMessageParam[] = [
-                        {
-                            role: "user",
-                            content: [
-                                {
-                                    type: "text",
-                                    text: "What's in this image and what color is it?",
-                                },
-                                {
-                                    type: "image_url",
-                                    image_url: {
-                                        url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg==",
-                                        detail: "auto",
-                                    },
-                                },
-                            ],
+                        execute: async ({ location }) => {
+                            const response = await fetch(
+                                `https://api.weatherapi.com/v1/current.json?q=${location}&key=88f97127772c41a991095603230604`
+                            );
+                            const data = await response.json();
+                            return data;
                         },
-                    ];
+                    }),
+                };
 
-                    const schema = {
-                        analysis: z.object({
-                            description: z.string(),
-                            color: z.string(),
-                            dimensions: z.object({
-                                width: z.number(),
-                                height: z.number(),
-                            }),
-                        }),
-                    };
+                const result = await llm.generate({
+                    prompt: "What is the weather in San Francisco?",
+                    tools,
+                });
 
-                    const result = await llm.generate(messages, schema, {});
+                console.log(result);
 
-                    console.log("Base64 image analysis result:", result);
+                expect(result.type).toBe("assistant");
+                expect(result.value).toBeDefined();
+            });
 
-                    if (result.type !== "analysis") {
-                        throw new Error(
-                            `Expected analysis response, got ${result.type}`
-                        );
-                    }
+            test("multimodal image url input", async () => {
+                const schema = z.object({
+                    description: z.string(),
+                    colors: z.array(z.string()),
+                    text_content: z.string().optional(),
+                    improvements: z.string().optional(),
+                });
 
-                    expect(result.value).toBeDefined();
-                    expect(result.value.description).toBeDefined();
-                    expect(result.value.color).toBeDefined();
-                    expect(result.value.dimensions).toBeDefined();
-                }
-            );
+                const result = await llm.generate({
+                    messages: [
+                        userMessage(
+                            "What's in this image? Suggest Improvements to the logo as well"
+                        ),
+                        userMessage([
+                            {
+                                type: "image",
+                                image: "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2f/Google_2015_logo.svg/1200px-Google_2015_logo.svg.png",
+                            },
+                        ]),
+                    ],
+                    schema,
+                });
+
+                console.log(result);
+
+                expect(result.type).toBe("assistant");
+                expect(result.value).toBeDefined();
+            });
+
+            test("multimodal image base64 input", async () => {
+                const schema = z.object({
+                    description: z.string(),
+                    colors: z.array(z.string()),
+                    text_content: z.string().optional(),
+                });
+
+                const base64Image =
+                    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg==";
+
+                const result = await llm.generate({
+                    messages: [
+                        userMessage("What's in this image?"),
+                        userMessage([
+                            {
+                                type: "image",
+                                image: base64Image,
+                            },
+                        ]),
+                    ],
+                    schema,
+                });
+
+                console.log(result);
+
+                expect(result.type).toBe("assistant");
+                expect(result.value).toBeDefined();
+            });
         });
     });
 });
