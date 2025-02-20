@@ -1,7 +1,4 @@
-import { Agent } from ".";
-import { userMessage } from "../../functions";
-import { type ModelProvider } from "../llm";
-import { Tool, type ToolSet } from "../tools";
+import { Agent, type ModelProvider, Tool, type ToolSet, userMessage } from "..";
 import fetch from "node-fetch";
 import { describe, expect, test } from "vitest";
 import { z } from "zod";
@@ -15,6 +12,10 @@ describe("@ai-agent-sdk/agent", () => {
         {
             provider: "google",
             id: "gemini-1.5-flash",
+        },
+        {
+            provider: "anthropic",
+            id: "claude-3-5-sonnet-20240620",
         },
     ];
 

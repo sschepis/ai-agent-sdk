@@ -1,6 +1,7 @@
 import type {
     AgentAction,
     ContextItem,
+    ZEETask,
     ZeeWorkflowOptions,
     ZEEWorkflowResponse,
 } from ".";
@@ -8,6 +9,7 @@ import { ZEEActionResponseType } from ".";
 import { systemMessage, Tool, userMessage } from "../..";
 import { Agent } from "../agent";
 import { Base } from "../base/base";
+import { type CoreMessage, type FilePart, type ImagePart } from "ai";
 import { z } from "zod";
 
 export class ZeeWorkflow extends Base {
@@ -16,6 +18,7 @@ export class ZeeWorkflow extends Base {
     private actionQueue: AgentAction[] = [];
     private maxIterations: number = 50;
     private temperature: number = 0.5;
+    private goal: string;
 
     constructor({ agents, model, goal, config }: ZeeWorkflowOptions) {
         super("zee");
@@ -36,6 +39,8 @@ export class ZeeWorkflow extends Base {
             }
         }
 
+        this.goal = goal;
+
         this.context.push(userMessage(goal));
 
         const breakdownAgent = new Agent({
@@ -44,6 +49,7 @@ export class ZeeWorkflow extends Base {
             instructions: [
                 "Break down the user's goal into smaller sequential tasks",
                 "For every smaller task, select the best agent that can handle the task",
+                "If the task involves analyzing images or files, include them in the attachments",
                 `The available agents are: ${JSON.stringify(
                     Object.values(agents).map(
                         ({ name, description, instructions }) => ({
@@ -56,20 +62,33 @@ export class ZeeWorkflow extends Base {
                 "Return a JSON array of tasks, where each task has:",
                 "- agentName: the name of the agent to handle the task",
                 "- instructions: array of instructions for the agent",
+                "- attachments: array of attachments items, each being an array of objects with {type: 'image', image: url} or {type: 'file', data: url, mimeType: mimeType}",
                 "- dependencies: object mapping agent names to why they are needed",
                 "Example response format:",
                 JSON.stringify(
                     [
                         {
-                            agentName: "writer",
-                            instructions: ["Write script outline"],
+                            agentName: "image analyzer",
+                            instructions: ["Analyze the logo design"],
+                            attachments: [
+                                [
+                                    {
+                                        type: "image",
+                                        image: "https://example.com/logo.png",
+                                    },
+                                ],
+                            ],
                             dependencies: {},
                         },
                         {
-                            agentName: "budget manager",
-                            instructions: ["Create budget breakdown"],
+                            agentName: "writer",
+                            instructions: [
+                                "Write brand guidelines based on logo analysis",
+                            ],
+                            attachments: [],
                             dependencies: {
-                                writer: "Needs script to estimate budget",
+                                "image analyzer":
+                                    "Needs logo analysis to write guidelines",
                             },
                         },
                     ],
@@ -109,12 +128,36 @@ export class ZeeWorkflow extends Base {
                     description: "Get information from a single agent",
                     parameters: z.object({
                         agentName: z.string(),
-                        task: z.string(),
+                        tasks: z.array(
+                            z.union([
+                                z.string(),
+                                z.array(
+                                    z.union([
+                                        z.object({
+                                            type: z.literal("image"),
+                                            image: z.string(),
+                                            mimeType: z.string().optional(),
+                                        }),
+                                        z.object({
+                                            type: z.literal("file"),
+                                            data: z.string(),
+                                            mimeType: z.string(),
+                                        }),
+                                    ])
+                                ),
+                            ])
+                        ),
                     }),
-                    execute: async ({ agentName, task }) => {
+                    execute: async ({ agentName, tasks }) => {
                         const agent = this.getAgent(agentName);
+                        if (!agent) {
+                            throw new Error(
+                                `Agent '${agentName}' not found. Available agents: '${Object.keys(this.agents).join("', '")}'.`
+                            );
+                        }
+
                         const response = await agent.generate({
-                            messages: [userMessage(task)],
+                            messages: tasks.map(userMessage),
                         });
 
                         return response.value;
@@ -159,15 +202,11 @@ export class ZeeWorkflow extends Base {
         );
     }
 
-    private parseBreakdownResponse(response: string): {
-        agentName: string;
-        instructions: string[];
-        dependencies: Record<string, string>;
-    }[] {
+    private parseBreakdownResponse(response: string): ZEETask[] {
         console.log("\n📝 Parsing 'breakdown' response");
 
         try {
-            const tasks = JSON.parse(response);
+            const tasks = JSON.parse(response) as ZEETask[];
 
             if (!Array.isArray(tasks)) {
                 throw new Error("'breakdown' response must be an array");
@@ -177,15 +216,31 @@ export class ZeeWorkflow extends Base {
                 if (!task.agentName || !Array.isArray(task.instructions)) {
                     throw new Error(`Invalid task format at index ${index}`);
                 }
+
                 console.log(
                     `\n📌 Task for '${task.agentName}':`,
                     task.instructions,
-                    Object.entries(task.dependencies).length
+                    Object.keys(task.dependencies).length
                         ? `\nDependent on: ${Object.entries(task.dependencies)
                               .map(([key, value]) => `${key}: ${value}`)
                               .join(", ")}`
+                        : "",
+                    task.attachments.length
+                        ? `\nAttachments provided: ${task.attachments.map(
+                              (item) =>
+                                  item.map(
+                                      (i) =>
+                                          `${i.type}: ${(i as ImagePart).image || (i as FilePart).data}`
+                                  )
+                          )}`
                         : ""
                 );
+
+                if (task.attachments && !Array.isArray(task.attachments)) {
+                    throw new Error(
+                        `Invalid attachments format at index ${index}`
+                    );
+                }
             });
 
             return tasks;
@@ -255,12 +310,12 @@ export class ZeeWorkflow extends Base {
         });
         console.log(`\n💭 '${action.to}' thinking...`);
 
-        const response = await targetAgent.generate({
-            messages: [
-                ...(action.to !== "mastermind"
-                    ? [
-                          systemMessage(
-                              `You have to:
+        const messages: CoreMessage[] = [];
+
+        if (action.to !== "mastermind") {
+            messages.push(
+                systemMessage(
+                    `You have to:
                         1. Complete your task by providing an answer for the current task from the context.
                         2. If the answer in not in the context, try to avoid asking for more information.
                         3. If you ABSOLUTELY need additional information to complete your task, request more information by asking a question
@@ -268,21 +323,28 @@ export class ZeeWorkflow extends Base {
                         Instructions for responding:
                         - If you need more information, start with "${ZEEActionResponseType.NEED_INFO}" followed by your question
                         - If this is your answer, start with "${ZEEActionResponseType.COMPLETE}" followed by your response.`
-                          ),
-                      ]
-                    : action.type === "followup"
-                      ? [
-                            systemMessage(
-                                `start your response with "${ZEEActionResponseType.FOLLOWUP_COMPLETE}[agent name]:" followed by the response from the agent. Replace 'agent name' with the name of the agent that is responding.`
-                            ),
-                        ]
-                      : []),
-                userMessage(
-                    `${relevantContext ? `Relevant context -> ${relevantContext}` : ""}
-                    \nCurrent task -> ${action.content}`
-                ),
-            ],
-        });
+                )
+            );
+        } else if (action.type === "followup") {
+            messages.push(
+                systemMessage(
+                    `start your response with "${ZEEActionResponseType.FOLLOWUP_COMPLETE}[agent name]:" followed by the response from the agent. Replace 'agent name' with the name of the agent that is responding.`
+                )
+            );
+        }
+
+        messages.push(
+            userMessage(
+                `${relevantContext ? `Relevant context -> ${relevantContext}` : ""}
+                \nCurrent task -> ${action.content}`
+            )
+        );
+
+        if (action.metadata?.attachments?.length) {
+            messages.push(...action.metadata.attachments.map(userMessage));
+        }
+
+        const response = await targetAgent.generate({ messages });
 
         const responseContent = response.value;
 
@@ -350,7 +412,9 @@ export class ZeeWorkflow extends Base {
         console.log("\n🎬 Starting workflow execution");
 
         console.log("\n📋 Getting task breakdown from 'breakdown'...");
-        const breakdownResponse = await this.getAgent("breakdown").generate({});
+        const breakdownResponse = await this.getAgent("breakdown").generate({
+            messages: [userMessage(this.goal)],
+        });
 
         const tasks = this.parseBreakdownResponse(breakdownResponse.value);
 
@@ -362,6 +426,7 @@ export class ZeeWorkflow extends Base {
                 content: task.instructions.join("\n"),
                 metadata: {
                     dependencies: task.dependencies,
+                    attachments: task.attachments,
                 },
             });
         });

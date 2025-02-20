@@ -1,6 +1,4 @@
-import { LLM, type ModelProvider } from ".";
-import { userMessage } from "../../functions";
-import { Tool, type ToolSet } from "../tools";
+import { LLM, Tool, userMessage, type ModelProvider, type ToolSet } from "..";
 import fetch from "node-fetch";
 import { describe, expect, test } from "vitest";
 import { z } from "zod";
@@ -15,6 +13,10 @@ describe("@ai-agent-sdk/llm", () => {
             provider: "google",
             id: "gemini-1.5-flash",
         },
+        {
+            provider: "anthropic",
+            id: "claude-3-5-sonnet-20240620",
+        },
     ];
 
     providers.forEach((model) => {
@@ -24,7 +26,7 @@ describe("@ai-agent-sdk/llm", () => {
             test("structured output", async () => {
                 const schema = z.object({
                     answer: z.string(),
-                    explanation: z.number(),
+                    explanation: z.string(),
                 });
 
                 const result = await llm.generate<typeof schema>({
@@ -130,6 +132,8 @@ describe("@ai-agent-sdk/llm", () => {
                 expect(result.type).toBe("assistant");
                 expect(result.value).toBeDefined();
             });
+
+            // TODO: add audio and file multimodal input tests
         });
     });
 });

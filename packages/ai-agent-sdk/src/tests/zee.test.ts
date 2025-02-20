@@ -1,7 +1,11 @@
-import { ZeeWorkflow } from ".";
-import { Agent } from "../agent";
-import { type ModelProvider } from "../llm";
-import { NFTBalancesTool, TokenBalancesTool, Tool } from "../tools";
+import {
+    Agent,
+    type ModelProvider,
+    NFTBalancesTool,
+    TokenBalancesTool,
+    Tool,
+    ZeeWorkflow,
+} from "..";
 import fetch from "node-fetch";
 import { describe, test } from "vitest";
 import { z } from "zod";
@@ -12,18 +16,22 @@ describe("@ai-agent-sdk/zee", () => {
             provider: "openai",
             id: "gpt-4o-mini",
         },
-        // ! FIX: ZEE is not working with Google models
+        // ! FIX: ZEE is not working with Google models (content is needed)
         // {
         //     provider: "google",
         //     id: "gemini-1.5-flash",
         // },
+        {
+            provider: "anthropic",
+            id: "claude-3-5-sonnet-20240620",
+        },
     ];
     providers.forEach((model) => {
         describe(`${model.provider}::${model.id}`, () => {
             test("workflow with two agents", async () => {
                 const scriptWriter = new Agent({
                     name: "script writer",
-                    description: "You are an expert screenplay writer...",
+                    description: "You are an expert screenplay writer",
                     instructions: [
                         "Write a script outline with 3-5 main characters and key plot points.",
                         "Outline the three-act structure and suggest 2-3 twists.",
@@ -34,7 +42,7 @@ describe("@ai-agent-sdk/zee", () => {
 
                 const producer = new Agent({
                     name: "movie producer",
-                    description: "Experienced movie producer...",
+                    description: "Experienced movie producer",
                     instructions: [
                         "Based on the script outline, plan the cast and crew for the movie.",
                         "Summarize the budget for the movie.",
@@ -152,10 +160,7 @@ describe("@ai-agent-sdk/zee", () => {
                         "You are provide NFT balances for a wallet address for a chain.",
                     instructions: ["Provide the nft holdings"],
                     tools: {
-                        nftBalances: new NFTBalancesTool(
-                            model.provider,
-                            process.env["GOLDRUSH_API_KEY"]!
-                        ),
+                        nftBalances: new NFTBalancesTool(model.provider),
                     },
                 });
 
@@ -166,10 +171,7 @@ describe("@ai-agent-sdk/zee", () => {
                         "You are provide token balances for a wallet address for a chain.",
                     instructions: ["Provide the token holdings"],
                     tools: {
-                        tokenBalances: new TokenBalancesTool(
-                            model.provider,
-                            process.env["GOLDRUSH_API_KEY"]!
-                        ),
+                        tokenBalances: new TokenBalancesTool(model.provider),
                     },
                 });
 
@@ -184,7 +186,7 @@ describe("@ai-agent-sdk/zee", () => {
                 });
 
                 const zee = new ZeeWorkflow({
-                    goal: "Whats are the NFT and Token balances of 'karanpargal.eth' on 'eth-mainnet'? Elaborate on the balances.",
+                    goal: "Whats are the NFT and Token balances of the wallet address 'karanpargal.eth' on the chain 'eth-mainnet'? Elaborate on the balances.",
                     agents: [
                         nftBalancesAgent,
                         tokenBalancesAgent,
@@ -241,6 +243,29 @@ describe("@ai-agent-sdk/zee", () => {
                     model,
                     config: {
                         maxIterations: 5,
+                    },
+                });
+                const result = await zee.run();
+
+                console.log(result);
+            });
+
+            test("workflow with image messages", async () => {
+                const imageAnalyser = new Agent({
+                    name: "image analyser",
+                    description: "You are an expert image analyser",
+                    instructions: [
+                        "Analyze the image and provide a detailed description of the image.",
+                    ],
+                    model,
+                });
+
+                const zee = new ZeeWorkflow({
+                    goal: "Analyze the image at https://drive.usercontent.google.com/download?id=1NwUfXIVOus3mPz8EA0UIib3ZxM6hNIjx and provide a detailed analysis of what it depicts.",
+                    agents: [imageAnalyser],
+                    model,
+                    config: {
+                        temperature: 1,
                     },
                 });
 
