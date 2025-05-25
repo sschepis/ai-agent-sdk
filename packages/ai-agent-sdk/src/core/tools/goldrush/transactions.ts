@@ -25,7 +25,6 @@ export class TransactionsTool extends BaseGoldRushTool<
                         address,
                         {
                             noLogs: true,
-                            withSafe: false,
                         }
                     );
 

@@ -19,11 +19,11 @@ describe("@ai-agent-sdk/tools/goldrush", () => {
         },
         {
             provider: "google",
-            id: "gemini-1.5-flash",
+            id: "gemini-2.5-flash-preview-05-20",
         },
         {
             provider: "anthropic",
-            id: "claude-3-5-sonnet-20240620",
+            id: "claude-3-7-sonnet-20250219",
         },
     ];
 

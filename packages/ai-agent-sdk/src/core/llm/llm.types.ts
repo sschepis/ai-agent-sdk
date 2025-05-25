@@ -2,6 +2,15 @@ import type { ToolSet } from "../tools";
 import type { FilePart, generateObject, generateText, ImagePart } from "ai";
 import type { AnyZodObject, z } from "zod";
 
+
+export type DeepSeekModelId =
+    | "deepseek-chat"
+    | "deepseek-reasoner";
+export interface DeepSeekModelProvider {
+    provider: "deepseek";
+    id: DeepSeekModelId;
+}
+
 export type OpenAIModelId =
     | "gpt-4o"
     | "gpt-4o-mini"
@@ -28,39 +37,21 @@ export interface OpenAIModelProvider {
 }
 
 export type AnthropicModelId =
-    | "claude-3-5-sonnet-latest"
-    | "claude-3-5-sonnet-20241022"
-    | "claude-3-5-sonnet-20240620"
-    | "claude-3-5-haiku-latest"
-    | "claude-3-5-haiku-20241022"
-    | "claude-3-opus-latest"
-    | "claude-3-opus-20240229"
-    | "claude-3-sonnet-20240229"
-    | "claude-3-haiku-20240307";
+    | "claude-4-sonnet-20250514:thinking"
+    | "claude-4-sonnet-20250514"
+    | "claude-4-opus-20250514:thinking"
+    | "claude-4-opus-20250514"
+    | "claude-3-7-sonnet-20250219:thinking"
+    | "claude-3-7-sonnet-20250219";
 export interface AnthropicModelProvider {
     provider: "anthropic";
     id: AnthropicModelId;
 }
 
 export type GoogleModelId =
-    | "gemini-2.0-flash-001"
-    | "gemini-1.5-flash"
-    | "gemini-1.5-flash-latest"
-    | "gemini-1.5-flash-001"
-    | "gemini-1.5-flash-002"
-    | "gemini-1.5-flash-8b"
-    | "gemini-1.5-flash-8b-latest"
-    | "gemini-1.5-flash-8b-001"
-    | "gemini-1.5-pro"
-    | "gemini-1.5-pro-latest"
-    | "gemini-1.5-pro-001"
-    | "gemini-1.5-pro-002"
-    | "gemini-2.0-flash-lite-preview-02-05"
-    | "gemini-2.0-pro-exp-02-05"
-    | "gemini-2.0-flash-thinking-exp-01-21"
-    | "gemini-2.0-flash-exp"
-    | "gemini-exp-1206"
-    | "learnlm-1.5-pro-experimental";
+    | "gemini-2.5-flash-preview-05-20"
+    | "gemini-2.5-flash-preview-05-20:thinking"
+    | "gemini-2.5-pro-preview-05-06";
 export interface GoogleModelProvider {
     provider: "google";
     id: GoogleModelId;
@@ -68,6 +59,7 @@ export interface GoogleModelProvider {
 
 export type ModelProvider =
     | OpenAIModelProvider
+    | DeepSeekModelProvider
     | AnthropicModelProvider
     | GoogleModelProvider;
 

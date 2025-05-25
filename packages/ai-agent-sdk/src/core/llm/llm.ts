@@ -10,7 +10,7 @@ import type {
 } from "./llm.types";
 import { anthropic } from "@ai-sdk/anthropic";
 import { google } from "@ai-sdk/google";
-import { openai } from "@ai-sdk/openai";
+import { openai, createOpenAI } from "@ai-sdk/openai";
 import {
     generateObject,
     generateText,
@@ -27,6 +27,12 @@ export class LLM extends Base {
         switch (provider) {
             case "openai":
                 this.model = openai(id);
+                break;
+            case "deepseek":
+                const deepseekProvider = createOpenAI({
+                    baseURL: "https://api.deepseek.ai/v1",
+                });
+                this.model = deepseekProvider(id);
                 break;
             case "anthropic":
                 this.model = anthropic(id);
